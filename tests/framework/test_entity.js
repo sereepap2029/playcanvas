@@ -1,195 +1,390 @@
-module('pc.fw.Entity', {
-    setup: function () {
-        var count = 0;
-        var Clonable = function () {
-            this.value = count++;
-            this.clone = function () {
-                return new Clonable();
+describe("pc.Entity", function () {
+    var app;
+
+    beforeEach(function () {
+        app = new pc.Application(document.createElement("canvas"));
+        app.systems.add(new pc.DummyComponentSystem(app));
+    });
+
+    afterEach(function () {
+        app.destroy();
+    });
+
+    var createSubtree = function() {
+        // Naming indicates path within the tree, with underscores separating levels.
+        var a = new pc.Entity('a', app);
+        var a_a = new pc.Entity('a_a', app);
+        var a_b = new pc.Entity('a_b', app);
+        var a_a_a = new pc.Entity('a_a_a', app);
+        var a_a_b = new pc.Entity('a_a_b', app);
+
+        a.addChild(a_a);
+        a.addChild(a_b);
+
+        a_a.addChild(a_a_a);
+        a_a.addChild(a_a_b);
+
+        // Add some components for testing clone behaviour
+        a.addComponent('animation', { speed: 1, loop: true });
+        a.addComponent('camera', { nearClip: 2, farClip: 3 });
+        a_a.addComponent('collision', { radius: 4, height: 5 });
+        a_a.addComponent('light', { attenuationStart: 6, attenuationEnd: 7 });
+        a_a_b.addComponent('rigidbody', { point: new pc.Vec3(1, 2, 3), normal: new pc.Vec3(4, 5, 6) });
+        a_a_b.addComponent('sound', { volume: 8, pitch: 9 });
+
+        return {
+            a: a,
+            a_a: a_a,
+            a_b: a_b,
+            a_a_a: a_a_a,
+            a_a_b: a_a_b,
+        };
+    };
+
+    var cloneSubtree = function(subtree) {
+        var a = subtree.a.clone();
+        var a_a = a.children[0];
+        var a_b = a.children[1];
+        var a_a_a = a_a.children[0];
+        var a_a_b = a_a.children[1];
+
+        return {
+            a: a,
+            a_a: a_a,
+            a_b: a_b,
+            a_a_a: a_a_a,
+            a_a_b: a_a_b,
+        };
+    };
+
+    it("clone() returns a deep clone of the entity's subtree, including all components", function () {
+        var subtree1 = createSubtree();
+        var subtree2 = cloneSubtree(subtree1);
+
+        // Ensure structures are identical at every level
+        strictEqual(subtree1.a.name, subtree2.a.name);
+        strictEqual(subtree1.a.animation.speed, subtree2.a.animation.speed);
+        strictEqual(subtree1.a.animation.loop, subtree2.a.animation.loop);
+        strictEqual(subtree1.a.camera.nearClip, subtree2.a.camera.nearClip);
+        strictEqual(subtree1.a.camera.farClip, subtree2.a.camera.farClip);
+
+        strictEqual(subtree1.a_a.name, subtree2.a_a.name);
+        strictEqual(subtree1.a_a.collision.radius, subtree2.a_a.collision.radius);
+        strictEqual(subtree1.a_a.collision.height, subtree2.a_a.collision.height);
+        strictEqual(subtree1.a_a.light.attenuationStart, subtree2.a_a.light.attenuationStart);
+        strictEqual(subtree1.a_a.light.attenuationEnd, subtree2.a_a.light.attenuationEnd);
+
+        strictEqual(subtree1.a_b.name, subtree2.a_b.name);
+        strictEqual(subtree1.a_a_a.name, subtree2.a_a_a.name);
+        strictEqual(subtree1.a_a_b.name, subtree2.a_a_b.name);
+        deepEqual(subtree1.a_a_b.rigidbody.point, subtree2.a_a_b.rigidbody.point);
+        deepEqual(subtree1.a_a_b.rigidbody.normal, subtree2.a_a_b.rigidbody.normal);
+        strictEqual(subtree1.a_a_b.sound.volume, subtree2.a_a_b.sound.volume);
+        strictEqual(subtree1.a_a_b.sound.pitch, subtree2.a_a_b.sound.pitch);
+
+        // Ensure we only have the exact number of children that were expected
+        strictEqual(subtree1.a.children.length, subtree2.a.children.length);
+        strictEqual(subtree1.a_a.children.length, subtree2.a_a.children.length);
+        strictEqual(subtree1.a_b.children.length, subtree2.a_b.children.length);
+        strictEqual(subtree1.a_a_a.children.length, subtree2.a_a_a.children.length);
+        strictEqual(subtree1.a_a_b.children.length, subtree2.a_a_b.children.length);
+
+        // Ensure copies were created, not references
+        notEqual(subtree1.a, subtree2.a);
+        notEqual(subtree1.a.animation, subtree2.a.animation);
+        notEqual(subtree1.a.camera, subtree2.a.camera);
+        notEqual(subtree1.a_a, subtree2.a_a);
+        notEqual(subtree1.a_a.collision, subtree2.a_a.collision);
+        notEqual(subtree1.a_a.light, subtree2.a_a.light);
+        notEqual(subtree1.a_b, subtree2.a_b);
+        notEqual(subtree1.a_a_a, subtree2.a_a_a);
+        notEqual(subtree1.a_a_b, subtree2.a_a_b);
+        notEqual(subtree1.a_a_b.rigidbody, subtree2.a_a_b.rigidbody);
+        notEqual(subtree1.a_a_b.sound, subtree2.a_a_b.sound);
+
+        // Ensure new guids were created
+        notEqual(subtree1.a.getGuid(), subtree2.a.getGuid());
+        notEqual(subtree1.a_a.getGuid(), subtree2.a_a.getGuid());
+        notEqual(subtree1.a_b.getGuid(), subtree2.a_b.getGuid());
+        notEqual(subtree1.a_a_a.getGuid(), subtree2.a_a_a.getGuid());
+        notEqual(subtree1.a_a_b.getGuid(), subtree2.a_a_b.getGuid());
+    });
+
+    it("clone() resolves entity property references that refer to entities within the duplicated subtree", function () {
+        var subtree1 = createSubtree();
+        subtree1.a.addComponent('dummy', { myEntity1: subtree1.a_a.getGuid(), myEntity2: subtree1.a_a_b.getGuid() });
+        subtree1.a_a_a.addComponent('dummy', { myEntity1: subtree1.a.getGuid(), myEntity2: subtree1.a_b.getGuid() });
+
+        var subtree2 = cloneSubtree(subtree1);
+        strictEqual(subtree2.a.dummy.myEntity1, subtree2.a_a.getGuid());
+        strictEqual(subtree2.a.dummy.myEntity2, subtree2.a_a_b.getGuid());
+        strictEqual(subtree2.a_a_a.dummy.myEntity1, subtree2.a.getGuid());
+        strictEqual(subtree2.a_a_a.dummy.myEntity2, subtree2.a_b.getGuid());
+    });
+
+    it("clone() resolves entity property references that refer to the cloned entity itself", function () {
+        var subtree1 = createSubtree();
+        subtree1.a.addComponent('dummy', { myEntity1: subtree1.a.getGuid() });
+        subtree1.a_a_a.addComponent('dummy', { myEntity1: subtree1.a_a_a.getGuid() });
+
+        var subtree2 = cloneSubtree(subtree1);
+        strictEqual(subtree2.a.dummy.myEntity1, subtree2.a.getGuid());
+        strictEqual(subtree2.a_a_a.dummy.myEntity1, subtree2.a_a_a.getGuid());
+    });
+
+    it("clone() does not attempt to resolve entity property references that refer to entities outside of the duplicated subtree", function () {
+        var root = new pc.Entity('root', app);
+        var sibling = new pc.Entity('sibling', app);
+
+        var subtree1 = createSubtree();
+        root.addChild(subtree1.a);
+        root.addChild(sibling);
+
+        subtree1.a.addComponent('dummy', { myEntity1: root.getGuid(), myEntity2: sibling.getGuid() });
+
+        var subtree2 = cloneSubtree(subtree1);
+        strictEqual(subtree2.a.dummy.myEntity1, root.getGuid());
+        strictEqual(subtree2.a.dummy.myEntity2, sibling.getGuid());
+    });
+
+    it("clone() ignores null and undefined entity property references", function () {
+        var subtree1 = createSubtree();
+        subtree1.a.addComponent('dummy', { myEntity1: null, myEntity2: undefined });
+
+        var subtree2 = cloneSubtree(subtree1);
+        strictEqual(subtree2.a.dummy.myEntity1, null);
+        strictEqual(subtree2.a.dummy.myEntity2, undefined);
+    });
+
+    it("clone() resolves entity script attributes that refer to entities within the duplicated subtree", function () {
+        var TestScript = pc.createScript('test');
+        TestScript.attributes.add('entityAttr', { type: 'entity' });
+        TestScript.attributes.add('entityArrayAttr', { type: 'entity', array: true });
+
+        var subtree1 = createSubtree();
+        app.root.addChild(subtree1.a);
+        subtree1.a.addComponent('script');
+        subtree1.a.script.create('test', {
+            attributes: {
+                entityAttr: subtree1.a_a.getGuid(),
+                entityArrayAttr: [subtree1.a_a.getGuid()]
             }
-        };
+        });
+        expect(subtree1.a.script.test.entityAttr.getGuid()).to.equal(subtree1.a_a.getGuid());
+        expect(subtree1.a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree1.a.script.test.entityArrayAttr.length).to.equal(1);
+        expect(subtree1.a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a_a.getGuid());
 
-        DerivedSystem = function () {
-            this.id = 'derived';
-            this.DataType = DerivedComponentData;
-            this.ComponentType = DerivedComponent;
-            this.schema = [{
-                name: 'enabled',
-                type: 'boolean',
-                defaultValue: true
-            },{
-                name: 'one',
-                type: 'array'
-            }, {
-                name: 'two',
-                type: 'number'
-            }, {
-                name: 'clonable',
-                exposed: false
-            }];
-        };
-        DerivedSystem = pc.inherits(DerivedSystem, pc.fw.ComponentSystem);
-        pc.extend(DerivedSystem.prototype, {
-            initializeComponentData: function (component, data, properties) {
-                DerivedSystem._super.initializeComponentData.call(this, component, data, ['enabled', 'one', 'two', 'clonable']);
-
-                component.one = [1,2,3];
-                component.two = 42;
-                component.clonable = new Clonable();
+        subtree1.a_a.addComponent('script');
+        subtree1.a_a.script.create('test', {
+            attributes: {
+                entityAttr: subtree1.a.getGuid(),
+                entityArrayAttr: [subtree1.a.getGuid(), subtree1.a_a_a.getGuid()]
             }
         });
 
-        DerivedComponent = function (entity) {
-        };
-        DerivedComponent = pc.inherits(DerivedComponent, pc.fw.Component);
-        pc.extend(DerivedComponent.prototype, {
-            onEnable: function () {
-                DerivedComponent._super.onEnable.call(this);
-                this.entity.onEnabledCalled = true;
-            },
-
-            onDisable: function () {
-                DerivedComponent._super.onDisable.call(this);
-                this.entity.onDisableCalled = true;
-            }
-        });
-
-        DerivedComponentData = function () {
-            this.one = null;
-            this.two = null;
-            this.clonable = null;
-            this.enabled = true;
-        };
-        DerivedComponentData = pc.inherits(DerivedComponentData, pc.fw.ComponentData);
-    }
-});
+        expect(subtree1.a_a.script.test.entityAttr.getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree1.a_a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree1.a_a.script.test.entityArrayAttr.length).to.equal(2);
+        expect(subtree1.a_a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree1.a_a.script.test.entityArrayAttr[1].getGuid()).to.equal(subtree1.a_a_a.getGuid());
 
 
+        var subtree2 = cloneSubtree(subtree1);
+        app.root.addChild(subtree2.a);
+        expect(subtree2.a.script.test.entityAttr.getGuid()).to.equal(subtree2.a_a.getGuid());
+        expect(subtree2.a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree2.a.script.test.entityArrayAttr.length).to.equal(1);
+        expect(subtree2.a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree2.a_a.getGuid());
 
-test("New", function () {
-    var e = new pc.fw.Entity();
-    ok(e);
-});
+        expect(subtree2.a_a.script.test.entityAttr.getGuid()).to.equal(subtree2.a.getGuid());
+        expect(subtree2.a_a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree2.a_a.script.test.entityArrayAttr.length).to.equal(2);
+        expect(subtree2.a_a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree2.a.getGuid());
+        expect(subtree2.a_a.script.test.entityArrayAttr[1].getGuid()).to.equal(subtree2.a_a_a.getGuid());
 
-test("setGuid/getGuid", function () {
-    jack(function () {
-
-        var gm = jack.create("gm", ["addNode", "removeNode"]);
-
-        var e = new pc.fw.Entity();
-
-        e.setGuid("123", gm);
-
-        equal(e.getGuid(), "123");
 
     });
-});
 
-test('clone', function () {
-    var e = new pc.fw.Entity();
+    it("clone() resolves entity script attributes that refer to entities within the duplicated subtree after preloading has finished", function () {
+        var TestScript = pc.createScript('test');
+        TestScript.attributes.add('entityAttr', { type: 'entity' });
+        TestScript.attributes.add('entityArrayAttr', { type: 'entity', array: true });
 
-    var c = e.clone();
+        app.systems.script.preloading = false;
 
-    notEqual(e.getGuid(), c.getGuid());
-    equal(e.getName(), c.getName());
-    deepEqual(e.getLocalPosition(), c.getLocalPosition());
-    deepEqual(e.getLocalRotation(), c.getLocalRotation());
-    deepEqual(e.getLocalScale(), c.getLocalScale());
-});
+        var subtree1 = createSubtree();
+        app.root.addChild(subtree1.a);
+        subtree1.a.addComponent('script');
+        subtree1.a.script.create('test', {
+            attributes: {
+                entityAttr: subtree1.a_a.getGuid(),
+                entityArrayAttr: [subtree1.a_a.getGuid()]
+            }
+        });
+        expect(subtree1.a.script.test.entityAttr.getGuid()).to.equal(subtree1.a_a.getGuid());
+        expect(subtree1.a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree1.a.script.test.entityArrayAttr.length).to.equal(1);
+        expect(subtree1.a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a_a.getGuid());
 
-test('clone - component', function () {
+        subtree1.a_a.addComponent('script');
+        subtree1.a_a.script.create('test', {
+            attributes: {
+                entityAttr: subtree1.a.getGuid(),
+                entityArrayAttr: [subtree1.a.getGuid(), subtree1.a_a_a.getGuid()]
+            }
+        });
 
-    var system = new DerivedSystem();
+        expect(subtree1.a_a.script.test.entityAttr.getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree1.a_a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree1.a_a.script.test.entityArrayAttr.length).to.equal(2);
+        expect(subtree1.a_a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree1.a_a.script.test.entityArrayAttr[1].getGuid()).to.equal(subtree1.a_a_a.getGuid());
 
-    var e = new pc.fw.Entity();
-    system.addComponent(e);
 
-    var c = e.clone();
+        var subtree2 = cloneSubtree(subtree1);
+        app.root.addChild(subtree2.a);
+        expect(subtree2.a.script.test.entityAttr.getGuid()).to.equal(subtree2.a_a.getGuid());
+        expect(subtree2.a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree2.a.script.test.entityArrayAttr.length).to.equal(1);
+        expect(subtree2.a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree2.a_a.getGuid());
 
-    notEqual(e.derived.one, c.derived.one);
-    deepEqual(e.derived.one, c.derived.one);
+        expect(subtree2.a_a.script.test.entityAttr.getGuid()).to.equal(subtree2.a.getGuid());
+        expect(subtree2.a_a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree2.a_a.script.test.entityArrayAttr.length).to.equal(2);
+        expect(subtree2.a_a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree2.a.getGuid());
+        expect(subtree2.a_a.script.test.entityArrayAttr[1].getGuid()).to.equal(subtree2.a_a_a.getGuid());
+    });
 
-    equal(e.derived.two, c.derived.two);
+    it("clone() does not attempt to resolve entity script attributes that refer to entities outside of the duplicated subtree", function () {
+        var TestScript = pc.createScript('test');
+        TestScript.attributes.add('entityAttr', { type: 'entity' });
+        TestScript.attributes.add('entityArrayAttr', { type: 'entity', array: true });
 
-    notEqual(e.derived.clonable, c.derived.clonable);
-    equal(c.derived.clonable.value, 1);
+        var subtree1 = createSubtree();
+        app.root.addChild(subtree1.a);
 
-});
+        subtree1.a_a.addComponent('script');
+        subtree1.a_a.script.create('test', {
+            attributes: {
+                entityAttr: app.root.getGuid(),
+                entityArrayAttr: [subtree1.a.getGuid(), app.root.getGuid()]
+            }
+        });
 
-test('reparent entity', function () {
-    var e = new pc.fw.Entity();
-    var child = new pc.fw.Entity();
-    e.addChild(child);
+        expect(subtree1.a_a.script.test.entityAttr.getGuid()).to.equal(app.root.getGuid());
+        expect(subtree1.a_a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree1.a_a.script.test.entityArrayAttr.length).to.equal(2);
+        expect(subtree1.a_a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree1.a_a.script.test.entityArrayAttr[1].getGuid()).to.equal(app.root.getGuid());
 
-    equal(child.getParent(), e);
-    var e2 = new pc.fw.Entity();
-    child.reparent(e2);
-    equal(child.getParent(), e2);
-});
+        var subtree2 = cloneSubtree(subtree1);
+        app.root.addChild(subtree2.a);
+        expect(subtree2.a_a.script.test.entityAttr.getGuid()).to.equal(app.root.getGuid());
+        expect(subtree2.a_a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree2.a_a.script.test.entityArrayAttr.length).to.equal(2);
+        expect(subtree2.a_a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree2.a.getGuid());
+        expect(subtree2.a_a.script.test.entityArrayAttr[1].getGuid()).to.equal(app.root.getGuid());
 
-test('disable entity', function () {
-    var e = new pc.fw.Entity();
-    equal(e.enabled, true);
-    e.enabled = false;
-    equal(e.enabled, false);
-});
+    });
 
-test('disable entity with child', function () {
-    var e = new pc.fw.Entity();
-    var child = new pc.fw.Entity();
-    e.addChild(child);
+    it("clone() does not resolve entity script attributes that refer to entities within the duplicated subtree if app.useLegacyScriptAttributeCloning is true", function () {
+        var TestScript = pc.createScript('test');
+        TestScript.attributes.add('entityAttr', { type: 'entity' });
+        TestScript.attributes.add('entityArrayAttr', { type: 'entity', array: true });
 
-    equal(child.enabled, true);
+        var subtree1 = createSubtree();
+        app.root.addChild(subtree1.a);
+        subtree1.a.addComponent('script');
+        subtree1.a.script.create('test', {
+            attributes: {
+                entityAttr: subtree1.a_a.getGuid(),
+                entityArrayAttr: [subtree1.a_a.getGuid()]
+            }
+        });
+        expect(subtree1.a.script.test.entityAttr.getGuid()).to.equal(subtree1.a_a.getGuid());
+        expect(subtree1.a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree1.a.script.test.entityArrayAttr.length).to.equal(1);
+        expect(subtree1.a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a_a.getGuid());
 
-    e.enabled = false;
-    equal(child.enabled, false);
+        subtree1.a_a.addComponent('script');
+        subtree1.a_a.script.create('test', {
+            attributes: {
+                entityAttr: subtree1.a.getGuid(),
+                entityArrayAttr: [subtree1.a.getGuid(), subtree1.a_a_a.getGuid()]
+            }
+        });
 
-    e.enabled = true;
-    equal(child.enabled, true);
-});
+        expect(subtree1.a_a.script.test.entityAttr.getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree1.a_a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree1.a_a.script.test.entityArrayAttr.length).to.equal(2);
+        expect(subtree1.a_a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree1.a_a.script.test.entityArrayAttr[1].getGuid()).to.equal(subtree1.a_a_a.getGuid());
 
-test('reparent disabled', function () {
-    var e = new pc.fw.Entity();
-    var child = new pc.fw.Entity();
-    e.addChild(child);
-    e.enabled = false;
-    equal(child.enabled, false);
+        app.useLegacyScriptAttributeCloning = true;
 
-    var e2 = new pc.fw.Entity();
-    child.reparent(e2);
-    equal(child.enabled, true);
-});
+        var subtree2 = cloneSubtree(subtree1);
+        app.root.addChild(subtree2.a);
+        expect(subtree2.a.script.test.entityAttr.getGuid()).to.equal(subtree1.a_a.getGuid());
+        expect(subtree2.a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree2.a.script.test.entityArrayAttr.length).to.equal(1);
+        expect(subtree2.a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a_a.getGuid());
 
-test('reparent 2 levels deep - disabled', function () {
-    var entity_level0 = new pc.fw.Entity();
-    var entity_level1 = new pc.fw.Entity();
-    var entity_level2 = new pc.fw.Entity();
-    entity_level0.addChild(entity_level1);
-    entity_level1.addChild(entity_level2);
+        expect(subtree2.a_a.script.test.entityAttr.getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree2.a_a.script.test.entityArrayAttr).to.be.an('array');
+        expect(subtree2.a_a.script.test.entityArrayAttr.length).to.equal(2);
+        expect(subtree2.a_a.script.test.entityArrayAttr[0].getGuid()).to.equal(subtree1.a.getGuid());
+        expect(subtree2.a_a.script.test.entityArrayAttr[1].getGuid()).to.equal(subtree1.a_a_a.getGuid());
 
-    entity_level0.enabled = false;
-    equal(entity_level2.enabled, false);
 
-    var entity2_levelRoot = new pc.fw.Entity();
-    entity_level1.reparent(entity2_levelRoot);
-    equal(entity_level2.enabled, true);
-});
+    });
 
-test('destroy entity disables components', function () {
-    var system = new DerivedSystem();
+    it("findByGuid() returns same entity", function () {
+        var e = new pc.Entity();
+        expect(e.findByGuid(e.getGuid())).to.equal(e);
+    });
 
-    var e = new pc.fw.Entity();
-    system.addComponent(e);
+    it("findByGuid() returns direct child entity", function () {
+        var e = new pc.Entity();
+        var c = new pc.Entity();
+        e.addChild(c);
+        expect(e.findByGuid(c.getGuid())).to.equal(c);
+    });
 
-    notEqual(e.onDisableCalled, true);
-    e.destroy();
-    equal(e.onDisableCalled, true);
-});
+    it("findByGuid() returns child of child entity", function () {
+        var e = new pc.Entity();
+        var c = new pc.Entity();
+        var c2 = new pc.Entity();
+        e.addChild(c);
+        c.addChild(c2);
+        expect(e.findByGuid(c2.getGuid())).to.equal(c2);
+    });
 
-test('onEnable is called after component is initialized', function () {
-    var system = new DerivedSystem();
+    it("findByGuid() does not return parent", function () {
+        var e = new pc.Entity();
+        var c = new pc.Entity();
+        e.addChild(c);
+        expect(c.findByGuid(e.getGuid())).to.equal(null);
+    });
 
-    var e = new pc.fw.Entity();
-    notEqual(e.onEnabledCalled, true);
-    system.addComponent(e);
-    equal(e.onEnabledCalled, true);
+    it("findByGuid() does not return destroyed entity", function () {
+        var e = new pc.Entity();
+        var c = new pc.Entity();
+        e.addChild(c);
+        c.destroy();
+        expect(e.findByGuid(c.getGuid())).to.equal(null);
+    });
+
+    it("findByGuid() does not return entity that was removed from hierarchy", function () {
+        var e = new pc.Entity();
+        var c = new pc.Entity();
+        e.addChild(c);
+        e.removeChild(c);
+        expect(e.findByGuid(c.getGuid())).to.equal(null);
+    });
+
+    it("findByGuid() does not return entity that does not exist", function () {
+        expect(app.root.findByGuid('missing')).to.equal(null);
+    });
+
 });
